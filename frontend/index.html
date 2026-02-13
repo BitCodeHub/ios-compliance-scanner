@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iOS Compliance Scanner - Lumen AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .upload-area {
+      border: 2px dashed #4F46E5;
+      transition: all 0.3s ease;
+    }
+    .upload-area.dragover {
+      background-color: #EEF2FF;
+      border-color: #6366F1;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      animation: spin 1s linear infinite;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="text-center mb-12">
+      <h1 class="text-4xl font-bold text-gray-900 mb-2">
+        iOS App Store Compliance Scanner
+      </h1>
+      <p class="text-gray-600">AI-Powered Analysis • Professional PDF Reports • Pre-Submission Validation</p>
+      <p class="text-sm text-indigo-600 mt-2">Powered by Lumen AI Solutions 💎</p>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="bg-white rounded-lg shadow-lg p-8 mb-8">
+      <div class="upload-area rounded-lg p-12 text-center cursor-pointer" id="uploadArea">
+        <svg class="mx-auto h-16 w-16 text-indigo-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Drag & Drop IPA File</h3>
+        <p class="text-gray-500 mb-4">or click to browse (max 500MB)</p>
+        <input type="file" id="fileInput" accept=".ipa" class="hidden">
+        <button onclick="document.getElementById('fileInput').click()" class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">
+          Select IPA File
+        </button>
+      </div>
+
+      <div id="fileInfo" class="hidden mt-6 p-4 bg-gray-50 rounded-lg">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="font-medium text-gray-900" id="fileName"></p>
+            <p class="text-sm text-gray-500" id="fileSize"></p>
+          </div>
+          <button onclick="startScan()" class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+            🤖 Scan with AI
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scanning Progress -->
+    <div id="scanningProgress" class="hidden bg-white rounded-lg shadow-lg p-8 mb-8">
+      <div class="text-center">
+        <div class="spinner inline-block w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full mb-4"></div>
+        <h3 class="text-xl font-semibold text-gray-900 mb-2" id="progressTitle">Scanning...</h3>
+        <p class="text-gray-600" id="progressText">Running compliance analysis...</p>
+        <div class="mt-6 space-y-2 text-left max-w-md mx-auto">
+          <div class="flex items-center text-sm">
+            <span class="text-green-500 mr-2">✓</span>
+            <span class="text-gray-700">Analyzing binary structure</span>
+          </div>
+          <div class="flex items-center text-sm">
+            <span class="text-yellow-500 mr-2">⟳</span>
+            <span class="text-gray-700">Checking Apple Guidelines</span>
+          </div>
+          <div class="flex items-center text-sm">
+            <span class="text-gray-400 mr-2">○</span>
+            <span class="text-gray-500">Running AI analysis</span>
+          </div>
+          <div class="flex items-center text-sm">
+            <span class="text-gray-400 mr-2">○</span>
+            <span class="text-gray-500">Generating PDF report</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="resultsSection" class="hidden">
+      <!-- Status Card -->
+      <div id="statusCard" class="bg-white rounded-lg shadow-lg p-8 mb-8"></div>
+
+      <!-- AI Analysis -->
+      <div id="aiAnalysis" class="bg-white rounded-lg shadow-lg p-8 mb-8"></div>
+
+      <!-- Findings -->
+      <div id="findingsSection" class="bg-white rounded-lg shadow-lg p-8"></div>
+    </div>
+  </div>
+
+  <script>
+    let selectedFile = null;
+
+    // Drag & Drop handlers
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, () => {
+        uploadArea.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      uploadArea.addEventListener(eventName, () => {
+        uploadArea.classList.remove('dragover');
+      });
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].name.endsWith('.ipa')) {
+        handleFile(files[0]);
+      } else {
+        alert('Please select a valid .ipa file');
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      selected File = file;
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('fileSize').textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+      document.getElementById('fileInfo').classList.remove('hidden');
+    }
+
+    async function startScan() {
+      if (!selectedFile) return;
+
+      // Show progress
+      document.getElementById('scanningProgress').classList.remove('hidden');
+      document.getElementById('resultsSection').classList.add('hidden');
+
+      // Create form data
+      const formData = new FormData();
+      formData.append('ipa', selectedFile);
+
+      try {
+        // Update progress
+        setTimeout(() => {
+          document.getElementById('progressTitle').textContent = 'Running AI Analysis...';
+          document.getElementById('progressText').textContent = 'Claude Sonnet 4 is analyzing your app...';
+        }, 3000);
+
+        setTimeout(() => {
+          document.getElementById('progressTitle').textContent = 'Generating PDF Report...';
+          document.getElementById('progressText').textContent = 'Creating professional compliance document...';
+        }, 8000);
+
+        const response = await fetch('http://localhost:3456/api/scan/enhanced', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          displayResults(result);
+        } else {
+          alert('Scan failed: ' + (result.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Network error: ' + error.message);
+      } finally {
+        document.getElementById('scanningProgress').classList.add('hidden');
+      }
+    }
+
+    function displayResults(result) {
+      document.getElementById('resultsSection').classList.remove('hidden');
+
+      // Status Card
+      const status = result.results.summary?.status || 'UNKNOWN';
+      const statusColors = {
+        'GREENLIT': 'bg-green-100 text-green-800',
+        'WARNING': 'bg-yellow-100 text-yellow-800',
+        'BLOCKED': 'bg-red-100 text-red-800'
+      };
+      const statusColor = statusColors[status] || 'bg-gray-100 text-gray-800';
+
+      document.getElementById('statusCard').innerHTML = `
+        <div class="text-center">
+          <div class="inline-block px-6 py-3 rounded-lg ${statusColor} text-2xl font-bold mb-4">
+            ${status}
+          </div>
+          <div class="grid grid-cols-3 gap-4 mt-6">
+            <div>
+              <p class="text-3xl font-bold text-red-600">${result.results.summary?.critical || 0}</p>
+              <p class="text-sm text-gray-600">Critical Issues</p>
+            </div>
+            <div>
+              <p class="text-3xl font-bold text-yellow-600">${result.results.summary?.warnings || 0}</p>
+              <p class="text-sm text-gray-600">Warnings</p>
+            </div>
+            <div>
+              <p class="text-3xl font-bold text-blue-600">${result.results.summary?.info || 0}</p>
+              <p class="text-sm text-gray-600">Info</p>
+            </div>
+          </div>
+          <a href="${result.downloadUrl}" target="_blank" class="mt-6 inline-block px-8 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold text-lg">
+            📄 Download Professional PDF Report
+          </a>
+        </div>
+      `;
+
+      // AI Analysis
+      if (result.results.aiAnalysis) {
+        const ai = result.results.aiAnalysis;
+        document.getElementById('aiAnalysis').innerHTML = `
+          <h2 class="text-2xl font-bold mb-4">🤖 AI-Powered Analysis</h2>
+          <div class="bg-indigo-50 rounded-lg p-6 mb-4">
+            <p class="text-lg font-semibold mb-2">Risk Level: <span class="text-indigo-700">${ai.riskLevel}</span></p>
+            <p class="text-lg font-semibold mb-2">Rejection Probability: <span class="text-red-600">${ai.rejectionProbability}%</span></p>
+            <p class="text-gray-700 mt-4">${ai.summary}</p>
+          </div>
+          <div class="space-y-4">
+            ${ai.recommendations?.map((rec, i) => `
+              <div class="border-l-4 border-indigo-600 bg-gray-50 p-4">
+                <div class="flex items-start">
+                  <span class="inline-block w-8 h-8 rounded-full bg-indigo-600 text-white text-center leading-8 font-bold mr-3">${rec.priority}</span>
+                  <div class="flex-1">
+                    <h4 class="font-bold text-gray-900">${rec.title}</h4>
+                    <p class="text-gray-700 mt-1">${rec.description}</p>
+                    <div class="mt-2 flex gap-4 text-sm">
+                      <span class="text-gray-600">Impact: <strong>${rec.impact}</strong></span>
+                      <span class="text-gray-600">Effort: <strong>${rec.effort}</strong></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('') || ''}
+          </div>
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

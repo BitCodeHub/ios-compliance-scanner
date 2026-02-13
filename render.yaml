@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ios-compliance-scanner
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 25.4.0
+      - key: PORT
+        value: 3456
