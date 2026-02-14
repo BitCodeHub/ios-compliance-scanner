@@ -144,7 +144,7 @@
     });
 
     function handleFile(file) {
-      selected File = file;
+      selectedFile = file;
       document.getElementById('fileName').textContent = file.name;
       document.getElementById('fileSize').textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
       document.getElementById('fileInfo').classList.remove('hidden');
@@ -173,7 +173,12 @@
           document.getElementById('progressText').textContent = 'Creating professional compliance document...';
         }, 8000);
 
-        const response = await fetch('http://localhost:3456/api/scan/enhanced', {
+        // Use relative URL for Render deployment, or detect current host
+        const apiUrl = window.location.hostname === 'localhost' 
+          ? 'http://localhost:3456/api/scan/enhanced'
+          : '/api/scan/enhanced';
+        
+        const response = await fetch(apiUrl, {
           method: 'POST',
           body: formData
         });
