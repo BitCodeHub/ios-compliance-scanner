@@ -173,10 +173,10 @@
           document.getElementById('progressText').textContent = 'Creating professional compliance document...';
         }, 8000);
 
-        // Use Mac Studio scanner (via ngrok) for production, localhost for dev
+        // Use relative URL - works for both localhost and production (Render)
         const apiUrl = window.location.hostname === 'localhost' 
           ? 'http://localhost:3456/api/scan/enhanced'
-          : 'https://roofless-melina-alcoholically.ngrok-free.dev/api/scan/enhanced';
+          : '/api/scan/enhanced';  // Relative to current domain
         
         const response = await fetch(apiUrl, {
           method: 'POST',
