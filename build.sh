@@ -7,32 +7,48 @@ set -e
 echo "📦 Installing Node.js dependencies..."
 npm install
 
-echo "🔧 Installing Greenlight CLI via Go..."
+echo "🔧 Installing Greenlight CLI..."
 
-# Install Go if not present (Render should have it)
+# Check if Go is available
 if ! command -v go &> /dev/null; then
-    echo "Go not found. Installing Go 1.22..."
-    curl -L https://go.dev/dl/go1.22.0.linux-amd64.tar.gz -o go.tar.gz
-    tar -C /tmp -xzf go.tar.gz
-    export PATH="/tmp/go/bin:$PATH"
-    export GOPATH="/tmp/go-workspace"
-    rm go.tar.gz
+    echo "❌ ERROR: Go is not available"
+    echo "Render should have Go pre-installed. If not, check environment settings."
+    exit 1
 fi
+
+echo "Go version: $(go version)"
 
 # Create bin directory
 mkdir -p bin
 
-# Install greenlight from source
-echo "Installing greenlight from source..."
-GOBIN="$(pwd)/bin" go install github.com/RevylAI/greenlight/cmd/greenlight@latest
+# Set Go environment variables
+export GOBIN="$(pwd)/bin"
+export CGO_ENABLED=0
 
-# Make executable
-chmod +x bin/greenlight || true
+# Install greenlight from source
+echo "Installing greenlight from github.com/RevylAI/greenlight..."
+go install github.com/RevylAI/greenlight/cmd/greenlight@latest
+
+# Verify installation
+if [ ! -f bin/greenlight ]; then
+    echo "❌ ERROR: Greenlight installation failed!"
+    echo "Expected binary at: $(pwd)/bin/greenlight"
+    ls -la bin/ || echo "bin/ directory doesn't exist"
+    exit 1
+fi
+
+# Make executable (should already be)
+chmod +x bin/greenlight
+
+# Test greenlight
+echo "Testing greenlight installation..."
+if ./bin/greenlight --version 2>&1 | grep -i greenlight; then
+    echo "✅ Greenlight installed successfully!"
+else
+    echo "Testing greenlight --help instead..."
+    ./bin/greenlight --help | head -5 || echo "Greenlight binary exists but version/help failed (might be OK)"
+fi
 
 echo "✅ Build complete!"
-if [ -f bin/greenlight ]; then
-    echo "Greenlight installed at: bin/greenlight"
-    ./bin/greenlight --version || echo "Greenlight ready (version check skipped)"
-else
-    echo "⚠️ Greenlight installation failed - scans will be limited"
-fi
+echo "Greenlight binary: $(pwd)/bin/greenlight"
+ls -lh bin/greenlight

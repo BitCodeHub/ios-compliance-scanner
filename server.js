@@ -117,8 +117,15 @@ async function fetchAppleGuidelines() {
 // Routes
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'iOS Compliance Scanner API', version: '1.0.0' });
+app.get('/health', async (req, res) => {
+  const greenlightOK = await verifyGreenlightAvailable();
+  res.json({ 
+    status: greenlightOK ? 'ok' : 'degraded',
+    service: 'iOS Compliance Scanner API', 
+    version: '1.0.0',
+    greenlight: greenlightOK ? 'available' : 'NOT AVAILABLE - scans will fail',
+    greenlightPath: process.env.GREENLIGHT_PATH || 'greenlight'
+  });
 });
 
 // Get Apple Guidelines (live)
@@ -383,36 +390,17 @@ app.post('/api/scan/enhanced', upload.single('ipa'), async (req, res) => {
   await require('fs').promises.mkdir(reportsDir, { recursive: true });
 
   try {
+    // 1. Run full greenlight scan (REQUIRED - no fallback)
+    console.log('🔍 Running greenlight scan...');
+    const result = await runGreenlight(`ipa "${req.file.path}" --format json`);
+    
     let scanResults;
-
-    // 1. Try to run greenlight scan (if available)
     try {
-      console.log('🔍 Attempting greenlight scan...');
-      const result = await runGreenlight(`ipa "${req.file.path}" --format json`);
       scanResults = JSON.parse(result.stdout);
-      console.log('✅ Greenlight scan completed');
-    } catch (greenlightError) {
-      console.warn('⚠️ Greenlight not available:', greenlightError.message);
-      // Fallback to basic scan
-      scanResults = {
-        fileName: req.file.originalname,
-        fileSize: req.file.size,
-        findings: [
-          {
-            severity: 'INFO',
-            title: 'Basic Scan Only',
-            description: 'Full greenlight scan unavailable. This is a basic compliance check. Key reminders: ensure Sign in with Apple is implemented for apps with login, include privacy manifest for required reason APIs, test on real devices, and provide clear app descriptions.',
-            guideline: '§2.1, §4.8, §5.1.2'
-          }
-        ],
-        summary: { 
-          status: 'WARNING', 
-          critical: 0, 
-          warnings: 1, 
-          info: 0,
-          message: 'Greenlight CLI not available - basic scan only'
-        }
-      };
+      console.log('✅ Greenlight scan completed successfully');
+    } catch (parseError) {
+      console.error('Failed to parse greenlight output:', result.stdout);
+      throw new Error(`Greenlight scan produced invalid JSON: ${parseError.message}`);
     }
 
     // 2. AI-powered analysis (if API key available)
@@ -495,13 +483,40 @@ app.get('/api/reports/:scanId', async (req, res) => {
   }
 });
 
+// Startup verification: Check if greenlight is available
+async function verifyGreenlightAvailable() {
+  return new Promise((resolve) => {
+    const greenlightBin = process.env.GREENLIGHT_PATH || 'greenlight';
+    exec(`${greenlightBin} --version`, (error, stdout, stderr) => {
+      if (error && !stdout && !stderr) {
+        console.error('❌ CRITICAL: Greenlight CLI not found!');
+        console.error(`   Expected at: ${greenlightBin}`);
+        console.error('   Scans will FAIL without greenlight.');
+        console.error('   Run: npm run build OR install greenlight manually');
+        resolve(false);
+      } else {
+        console.log(`✅ Greenlight CLI available at: ${greenlightBin}`);
+        if (stdout) console.log(`   Version info: ${stdout.trim()}`);
+        resolve(true);
+      }
+    });
+  });
+}
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 iOS Compliance Scanner API running on port ${PORT}`);
   console.log(`📋 Health check: http://localhost:${PORT}/health`);
   console.log(`📖 Guidelines: http://localhost:${PORT}/api/guidelines`);
   console.log(`🤖 AI-Enhanced Scan: POST /api/scan/enhanced`);
   console.log(`📄 PDF Reports: GET /api/reports/:scanId/download`);
+  
+  // Verify greenlight is installed
+  const greenlightOK = await verifyGreenlightAvailable();
+  if (!greenlightOK) {
+    console.error('\n⚠️  WARNING: Server started but greenlight is NOT available!');
+    console.error('⚠️  All scan requests will FAIL until greenlight is installed.\n');
+  }
 });
 
 module.exports = app;
