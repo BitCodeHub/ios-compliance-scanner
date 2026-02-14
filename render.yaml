@@ -4,10 +4,12 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: npm install
+    buildCommand: chmod +x build.sh && ./build.sh
     startCommand: node server.js
     envVars:
       - key: NODE_VERSION
         value: 25.4.0
       - key: PORT
         value: 3456
+      - key: GREENLIGHT_PATH
+        value: ./bin/greenlight

@@ -48,7 +48,9 @@ const upload = multer({
 // Helper: Run greenlight CLI
 function runGreenlight(args) {
   return new Promise((resolve, reject) => {
-    const command = `greenlight ${args}`;
+    // Use GREENLIGHT_PATH env var or default to 'greenlight' in PATH
+    const greenlightBin = process.env.GREENLIGHT_PATH || 'greenlight';
+    const command = `${greenlightBin} ${args}`;
     exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error && !stdout) {
         reject({ error: error.message, stderr });
@@ -381,26 +383,45 @@ app.post('/api/scan/enhanced', upload.single('ipa'), async (req, res) => {
   await require('fs').promises.mkdir(reportsDir, { recursive: true });
 
   try {
-    // 1. Run greenlight scan
-    const result = await runGreenlight(`ipa "${req.file.path}" --format json`);
     let scanResults;
+
+    // 1. Try to run greenlight scan (if available)
     try {
+      console.log('🔍 Attempting greenlight scan...');
+      const result = await runGreenlight(`ipa "${req.file.path}" --format json`);
       scanResults = JSON.parse(result.stdout);
-    } catch {
+      console.log('✅ Greenlight scan completed');
+    } catch (greenlightError) {
+      console.warn('⚠️ Greenlight not available:', greenlightError.message);
+      // Fallback to basic scan
       scanResults = {
-        rawOutput: result.stdout,
-        findings: [],
-        summary: { status: 'ERROR', critical: 0, warnings: 0, info: 0 }
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        findings: [
+          {
+            severity: 'INFO',
+            title: 'Basic Scan Only',
+            description: 'Full greenlight scan unavailable. This is a basic compliance check. Key reminders: ensure Sign in with Apple is implemented for apps with login, include privacy manifest for required reason APIs, test on real devices, and provide clear app descriptions.',
+            guideline: '§2.1, §4.8, §5.1.2'
+          }
+        ],
+        summary: { 
+          status: 'WARNING', 
+          critical: 0, 
+          warnings: 1, 
+          info: 0,
+          message: 'Greenlight CLI not available - basic scan only'
+        }
       };
     }
 
-    // 2. AI-powered analysis
+    // 2. AI-powered analysis (if API key available)
     console.log('🤖 Running AI analysis...');
     const aiAnalysis = await analyzeWithAI(scanResults);
     scanResults.aiAnalysis = aiAnalysis;
 
-    // 3. Generate AI fix suggestions for each finding
-    if (scanResults.findings && scanResults.findings.length > 0) {
+    // 3. Generate AI fix suggestions for each finding (if API key available)
+    if (scanResults.findings && scanResults.findings.length > 0 && !aiAnalysis.error) {
       console.log('💡 Generating AI fix suggestions...');
       scanResults.findings = await generateFixSuggestions(scanResults.findings);
     }
@@ -413,6 +434,11 @@ app.post('/api/scan/enhanced', upload.single('ipa'), async (req, res) => {
     // 5. Cleanup uploaded IPA
     await fs.unlink(req.file.path).catch(() => {});
 
+    // 6. Build download URL (handle both localhost and production)
+    const baseUrl = req.get('host').includes('localhost') 
+      ? `http://localhost:${PORT}`
+      : `https://${req.get('host')}`;
+
     res.json({
       scanId,
       timestamp: new Date().toISOString(),
@@ -420,13 +446,18 @@ app.post('/api/scan/enhanced', upload.single('ipa'), async (req, res) => {
       fileSize: req.file.size,
       results: scanResults,
       pdfReport: `/api/reports/${scanId}`,
-      downloadUrl: `http://localhost:${PORT}/api/reports/${scanId}/download`
+      downloadUrl: `${baseUrl}/api/reports/${scanId}/download`
     });
 
   } catch (error) {
     await fs.unlink(req.file.path).catch(() => {});
     console.error('Enhanced scan failed:', error);
-    res.status(500).json({ error: 'Enhanced scan failed', details: error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Enhanced scan failed', 
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
