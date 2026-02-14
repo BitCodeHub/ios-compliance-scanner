@@ -396,7 +396,14 @@ app.post('/api/scan/enhanced', upload.single('ipa'), async (req, res) => {
     
     let scanResults;
     try {
-      scanResults = JSON.parse(result.stdout);
+      // Greenlight outputs branding text before JSON - extract just the JSON part
+      const jsonMatch = result.stdout.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error('No JSON found in greenlight output:', result.stdout);
+        throw new Error('Greenlight did not produce JSON output');
+      }
+      
+      scanResults = JSON.parse(jsonMatch[0]);
       console.log('✅ Greenlight scan completed successfully');
     } catch (parseError) {
       console.error('Failed to parse greenlight output:', result.stdout);
