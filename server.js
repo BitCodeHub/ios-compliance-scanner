@@ -62,6 +62,65 @@ function runGreenlight(args) {
   });
 }
 
+// Helper: Parse greenlight terminal output (JSON format not implemented in greenlight)
+function parseGreenlightOutput(stdout) {
+  const result = {
+    status: 'ok',
+    findings: [],
+    summary: {}
+  };
+
+  // Extract app name
+  const appMatch = stdout.match(/App:\s+(.+)/);
+  if (appMatch) result.appName = appMatch[1].trim();
+
+  // Extract size
+  const sizeMatch = stdout.match(/Size:\s+([\d.]+)MB/);
+  if (sizeMatch) result.size = parseFloat(sizeMatch[1]) * 1024 * 1024;
+
+  // Extract summary (e.g., "47 findings: 45 warn 2 info")
+  const summaryMatch = stdout.match(/(\d+)\s+findings?:\s+(?:(\d+)\s+warn)?(?:\s+(\d+)\s+info)?/i);
+  if (summaryMatch) {
+    result.summary.total = parseInt(summaryMatch[1]) || 0;
+    result.summary.warn = parseInt(summaryMatch[2]) || 0;
+    result.summary.info = parseInt(summaryMatch[3]) || 0;
+  }
+
+  // Check for critical issues
+  if (stdout.includes('GREENLIT')) {
+    result.status = 'pass';
+  } else if (stdout.includes('BLOCKED') || stdout.includes('critical')) {
+    result.status = 'fail';
+  }
+
+  // Parse individual findings (simplified - greenlight terminal output varies)
+  // For now, create summary findings based on known checks
+  if (result.summary.warn > 0 || result.summary.info > 0) {
+    // Extract common issue types from output
+    const checks = [
+      { pattern: /privacy.*manifest/i, title: 'Privacy Manifest Check', severity: 'warn' },
+      { pattern: /info\.plist/i, title: 'Info.plist Completeness', severity: 'warn' },
+      { pattern: /app transport security/i, title: 'App Transport Security', severity: 'info' },
+      { pattern: /cellular.*limit/i, title: 'Cellular Download Limit', severity: 'warn' },
+      { pattern: /app icon/i, title: 'App Icon Presence', severity: 'warn' },
+      { pattern: /launch.*storyboard/i, title: 'Launch Storyboard', severity: 'warn' }
+    ];
+
+    checks.forEach(check => {
+      if (check.pattern.test(stdout)) {
+        result.findings.push({
+          title: check.title,
+          severity: check.severity,
+          description: `Found in greenlight scan output`,
+          impact: 'May affect App Store review'
+        });
+      }
+    });
+  }
+
+  return result;
+}
+
 // Helper: Download IPA from URL
 async function downloadIPA(url, outputPath) {
   const response = await axios({
@@ -392,23 +451,11 @@ app.post('/api/scan/enhanced', upload.single('ipa'), async (req, res) => {
   try {
     // 1. Run full greenlight scan (REQUIRED - no fallback)
     console.log('🔍 Running greenlight scan...');
-    const result = await runGreenlight(`ipa "${req.file.path}" --format json`);
+    const result = await runGreenlight(`ipa "${req.file.path}"`);
     
-    let scanResults;
-    try {
-      // Greenlight outputs branding text before JSON - extract just the JSON part
-      const jsonMatch = result.stdout.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.error('No JSON found in greenlight output:', result.stdout);
-        throw new Error('Greenlight did not produce JSON output');
-      }
-      
-      scanResults = JSON.parse(jsonMatch[0]);
-      console.log('✅ Greenlight scan completed successfully');
-    } catch (parseError) {
-      console.error('Failed to parse greenlight output:', result.stdout);
-      throw new Error(`Greenlight scan produced invalid JSON: ${parseError.message}`);
-    }
+    // Parse terminal output (greenlight's --format json is not implemented)
+    const scanResults = parseGreenlightOutput(result.stdout);
+    console.log('✅ Greenlight scan completed successfully:', scanResults.summary);
 
     // 2. AI-powered analysis (if API key available)
     console.log('🤖 Running AI analysis...');
